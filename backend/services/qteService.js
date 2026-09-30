@@ -1,73 +1,32 @@
-let qtePrompts = [{
-    id: 1,
-    key: "A",
-    difficulty: "easy",
-    timeLimit: 1000,
-    points: 100
-}, {
-    id: 2,
-    key: "SPACE",
-    difficulty: "hard",
-    timeLimit: 500,
-    points: 200
-}];
+const QtePrompt = require("../models/QtePrompt");
 
-const getAllPromptsService = () => {
-    return qtePrompts;
+const getAllPrompts = async () => {
+    return await QtePrompt.find();
 };
 
-const getPromptByIdService = (id) => {
-    return qtePrompts.find(prompt => prompt.id === id);
+const getPromptById = async (id) => {
+    return await QtePrompt.findById(id);
 };
 
-const createPromptService = (data) => {
+const createPrompt = async (data) => {
+    return await QtePrompt.create(data);};
 
-    const newPrompt = {
-        id: qtePrompts.length + 1,
-        key: data.key,
-        difficulty: data.difficulty,
-        timeLimit: data.timeLimit,
-        points: data.points
-    };
-
-    qtePrompts.push(newPrompt);
-
-    return newPrompt;
+const updatePrompt = async (id, data) => {
+    return await QtePrompt.findByIdAndUpdate(
+        id,
+        data,
+        { new: true }
+    );
 };
 
-const updatePromptService = (id, data) => {
-
-    const prompt = qtePrompts.find(prompt => prompt.id === id);
-
-    if (!prompt) {
-        return null;
-    }
-
-    prompt.key = data.key;
-    prompt.difficulty = data.difficulty;
-    prompt.timeLimit = data.timeLimit;
-    prompt.points = data.points;
-
-    return prompt;
-};
-
-const deletePromptService = (id) => {
-
-    const index = qtePrompts.findIndex(prompt => prompt.id === id);
-
-    if (index === -1) {
-        return null;
-    }
-
-    const deletedPrompt = qtePrompts.splice(index, 1);
-
-    return deletedPrompt[0];
+const deletePrompt = async (id) => {
+    return await QtePrompt.findByIdAndDelete(id);
 };
 
 module.exports = {
-    getAllPromptsService,
-    getPromptByIdService,
-    createPromptService,
-    updatePromptService,
-    deletePromptService
+    getAllPrompts,
+    getPromptById,
+    createPrompt,
+    updatePrompt,
+    deletePrompt
 };

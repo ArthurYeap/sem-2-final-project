@@ -5,17 +5,14 @@ const qtePromptSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-
     difficulty: {
         type: String,
         required: true
     },
-
     timeLimit: {
         type: Number,
         required: true
     },
-
     points: {
         type: Number,
         required: true

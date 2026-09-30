@@ -1,18 +1,13 @@
-const {       getAllPromptsService,
-    getPromptByIdService,
-    createPromptService,
-    updatePromptService,
-    deletePromptService} = require("../services/qteService");
+const qteService = require("../services/qteService");
 
-const getPrompts = (req, res) => {
-    const prompts = getAllPromptsService()
+const getPrompts = async (req, res) => {
+    const prompts = await qteService.getAllPrompts();
+
     res.status(200).json(prompts);
 };
-const getPrompt = (req, res) => {
 
-    const id = Number(req.params.id);
-
-    const prompt = getPromptByIdService(id);
+const getPrompt = async (req, res) => {
+    const prompt = await qteService.getPromptById(req.params.id);
 
     if (!prompt) {
         return res.status(404).json({
@@ -23,18 +18,17 @@ const getPrompt = (req, res) => {
     res.status(200).json(prompt);
 };
 
-const createPrompt = (req, res) => {
-
-    const prompt = createPromptService(req.body);
+const createPrompt = async (req, res) => {
+    const prompt = await qteService.createPrompt(req.body);
 
     res.status(201).json(prompt);
 };
 
-const updatePrompt = (req, res) => {
-
-    const id = Number(req.params.id);
-
-    const prompt = updatePromptService(id, req.body);
+const updatePrompt = async (req, res) => {
+    const prompt = await qteService.updatePrompt(
+        req.params.id,
+        req.body
+    );
 
     if (!prompt) {
         return res.status(404).json({
@@ -45,11 +39,8 @@ const updatePrompt = (req, res) => {
     res.status(200).json(prompt);
 };
 
-const deletePrompt = (req, res) => {
-
-    const id = Number(req.params.id);
-
-    const prompt = deletePromptService(id);
+const deletePrompt = async (req, res) => {
+    const prompt = await qteService.deletePrompt(req.params.id);
 
     if (!prompt) {
         return res.status(404).json({
@@ -65,8 +56,8 @@ const deletePrompt = (req, res) => {
 
 module.exports = {
     getPrompts,
-    createPrompt,
     getPrompt,
+    createPrompt,
     updatePrompt,
     deletePrompt
 };

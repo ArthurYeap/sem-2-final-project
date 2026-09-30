@@ -1,18 +1,21 @@
 const express = require("express");
+const validateObjectId = require("../middleware/validateObjectId");
+
 const {
     getPrompts,
     createPrompt,
-    updatePrompt,
     getPrompt,
-    deletePrompt
+    deletePrompt,
+    updatePrompt
 } = require("../controllers/qteController");
 
 const router = express.Router();
 
 router.get("/", getPrompts);
 router.post("/", createPrompt);
-router.get("/:id", getPrompt);
-router.delete("/:id", deletePrompt);
-router.put("/:id", updatePrompt);
+
+router.get("/:id", validateObjectId, getPrompt);
+router.delete("/:id", validateObjectId, deletePrompt);
+router.put("/:id", validateObjectId, updatePrompt);
 
 module.exports = router;
