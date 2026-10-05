@@ -1,0 +1,72 @@
+### Create a new QTE Prompt
+POST http://localhost:5000/qte-prompts
+Content-Type: application/json
+
+{
+  "difficulty": 666,
+  "timeLimit": 5,
+  "points": 200
+}
+
+### Get all prompts (Use three hashtags to separate requests)
+GET http://localhost:5000/qte-prompts
+
+### filter prompts
+GET http://localhost:5000/qte-prompts?key=SPACE&difficulty=hard
+
+### Get user
+GET http://localhost:5000/users/
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYzE1NzFkMWQwNzg4NmYzMDQyNjNiYiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzkxMDU2NDEyLCJleHAiOjE3OTEwNjAwMTJ9.HOSoNHW6RuOuh978CPL2ZnkEKdGxce-qc3o010j0DJs
+
+### Create Prompt
+POST http://localhost:5000/qte-prompts/
+Content-Type: application/json
+
+{
+    "key": "W",
+    "difficulty": "extreme",
+    "timeLimit": 500,
+    "points": 100
+}
+
+### update prompt
+PUT http://localhost:5000/qte-prompts/6abd51a357f67ec12d7d3e95
+Content-Type: application/json
+
+{
+    "key": "W",
+    "difficulty": "easy",
+    "timeLimit": -1000,
+    "points": 100
+}
+
+### create user
+POST http://localhost:5000/users/
+Content-Type: application/json
+
+{
+  "username": "Artoria",
+  "email": "arthur2@gmail.com",
+  "password": "asjfsda",
+  "role": "user"
+}
+
+### register user
+POST http://localhost:5000/auth/register
+Content-Type: application/json
+
+{
+  "username": "shuichi",
+  "email": "shuichi@gmail.com",
+  "password": "1234"
+}
+
+### login user
+POST http://localhost:5000/auth/login
+Content-Type: application/json
+
+{
+  "username": "monokuma",
+  "email": "ono@gmail.com",
+  "password": "1234"
+}

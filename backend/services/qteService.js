@@ -1,7 +1,17 @@
 const QtePrompt = require("../models/QtePrompt");
 
-const getAllPrompts = async () => {
-    return await QtePrompt.find();
+const getAllPrompts = async (filters = {}) => {
+    const query = {};
+
+    if (filters.difficulty) {
+        query.difficulty = filters.difficulty;
+    }
+
+    if (filters.key) {
+        query.key = filters.key.toUpperCase();
+    }
+
+    return await QtePrompt.find(query);
 };
 
 const getPromptById = async (id) => {
@@ -15,8 +25,10 @@ const updatePrompt = async (id, data) => {
     return await QtePrompt.findByIdAndUpdate(
         id,
         data,
-        { new: true }
-    );
+        {
+            new: true,
+            runValidators: true
+        }    );
 };
 
 const deletePrompt = async (id) => {

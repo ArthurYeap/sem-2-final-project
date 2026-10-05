@@ -1,5 +1,6 @@
 const express = require("express");
 const validateObjectId = require("../middleware/validateObjectId");
+const asyncHandler = require("../middleware/asyncHandler");
 
 const {
     getRooms,
@@ -11,10 +12,10 @@ const {
 
 const router = express.Router();
 
-router.get("/", getRooms);
-router.post("/", createRoom);
-router.get("/:id", validateObjectId, getRoom);
-router.put("/:id", validateObjectId, updateRoom);
-router.delete("/:id", validateObjectId, deleteRoom);
+router.get("/", asyncHandler(getRooms));
+router.post("/", asyncHandler(createRoom));
+router.get("/:id", validateObjectId, asyncHandler(getRoom));
+router.put("/:id", validateObjectId, asyncHandler(updateRoom));
+router.delete("/:id", validateObjectId, asyncHandler(deleteRoom));
 
 module.exports = router;

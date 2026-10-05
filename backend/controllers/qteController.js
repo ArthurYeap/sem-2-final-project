@@ -1,11 +1,10 @@
 const qteService = require("../services/qteService");
 
 const getPrompts = async (req, res) => {
-    const prompts = await qteService.getAllPrompts();
+    const prompts = await qteService.getAllPrompts(req.query);
 
     res.status(200).json(prompts);
 };
-
 const getPrompt = async (req, res) => {
     const prompt = await qteService.getPromptById(req.params.id);
 

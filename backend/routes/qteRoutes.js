@@ -1,5 +1,7 @@
 const express = require("express");
 const validateObjectId = require("../middleware/validateObjectId");
+const asyncHandler = require("../middleware/asyncHandler");
+const validatePrompt = require("../middleware/validatePrompt");
 
 const {
     getPrompts,
@@ -11,11 +13,15 @@ const {
 
 const router = express.Router();
 
-router.get("/", getPrompts);
-router.post("/", createPrompt);
+router.get("/", asyncHandler(getPrompts));
+router.post("/", validatePrompt, asyncHandler(createPrompt));
 
-router.get("/:id", validateObjectId, getPrompt);
-router.delete("/:id", validateObjectId, deletePrompt);
-router.put("/:id", validateObjectId, updatePrompt);
-
+router.get("/:id", validateObjectId, asyncHandler(getPrompt));
+router.delete("/:id", validateObjectId, asyncHandler(deletePrompt));
+router.put(
+    "/:id",
+    validateObjectId,
+    validatePrompt,
+    asyncHandler(updatePrompt)
+);
 module.exports = router;

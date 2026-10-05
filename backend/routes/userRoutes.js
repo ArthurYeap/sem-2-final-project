@@ -1,5 +1,8 @@
 const express = require("express");
 const validateObjectId = require("../middleware/validateObjectId");
+const asyncHandler = require("../middleware/asyncHandler");
+const authMiddleware = require("../middleware/authMiddleware");
+const adminMiddleware = require("../middleware/adminMiddleware");
 
 const {
     getUsers,
@@ -11,10 +14,41 @@ const {
 
 const router = express.Router();
 
-router.get("/", getUsers);
-router.post("/", createUser);
-router.get("/:id", validateObjectId, getUser);
-router.put("/:id", validateObjectId, updateUser);
-router.delete("/:id", validateObjectId, deleteUser);
+router.get(
+    "/",
+    authMiddleware,
+    adminMiddleware,
+    asyncHandler(getUsers)
+);
 
+router.post(
+    "/",
+    authMiddleware,
+    adminMiddleware,
+    asyncHandler(createUser)
+);
+
+router.get(
+    "/:id",
+    authMiddleware,
+    adminMiddleware,
+    validateObjectId,
+    asyncHandler(getUser)
+);
+
+router.put(
+    "/:id",
+    authMiddleware,
+    adminMiddleware,
+    validateObjectId,
+    asyncHandler(updateUser)
+);
+
+router.delete(
+    "/:id",
+    authMiddleware,
+    adminMiddleware,
+    validateObjectId,
+    asyncHandler(deleteUser)
+);
 module.exports = router;
