@@ -1,23 +1,26 @@
-import { useEffect } from "react";
-import api from "../api/axios";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Home = () => {
+    const { user, logout } = useAuth();
+    const navigate = useNavigate();
 
-    useEffect(() => {
-        const getUsers = async () => {
-            try {
-                const response = await api.get("/users");
+    const handleLogout = () => {
+        logout();
+        navigate("/");
+    };
 
-                console.log(response.data);
-            } catch (error) {
-                console.log(error.response?.data);
-            }
-        };
+    return (
+        <div>
+            <h1>Welcome to the QTE Game</h1>
 
-        getUsers();
-    }, []);
+            <p>Welcome, {user.username}</p>
 
-    return <h1>Welcome to the QTE Game</h1>;
+            <button onClick={handleLogout}>
+                Logout
+            </button>
+        </div>
+    );
 };
 
 export default Home;

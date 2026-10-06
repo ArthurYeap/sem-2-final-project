@@ -1,48 +1,58 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
-import { useAuth } from "../context/AuthContext.jsx";
 
-const Login = () => {
+const Register = () => {
+    const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
-    const { login } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
         setError("");
+        setSuccess("");
 
         try {
-            const response = await api.post("/auth/login", {
+            await api.post("/auth/register", {
+                username,
                 email,
                 password
             });
 
-            login(
-                response.data.user,
-                response.data.token
-            );
+            setSuccess("Registration successful!");
 
-            navigate("/home");
+            setTimeout(() => {
+                navigate("/");
+            }, 1000);
+
         } catch (error) {
-            console.log("LOGIN ERROR:", error);
-            console.log("RESPONSE:", error.response);
+            console.log("REGISTER ERROR:", error);
 
             setError(
                 error.response?.data?.message ||
-                "Login failed"
+                "Registration failed"
             );
         }
     };
 
     return (
         <div>
-            <h1>Login</h1>
+            <h1>Register</h1>
 
             <form onSubmit={handleSubmit}>
+
+                <input
+                    type="text"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                />
+
                 <input
                     type="email"
                     placeholder="Email"
@@ -58,17 +68,19 @@ const Login = () => {
                 />
 
                 <button type="submit">
-                    Login
+                    Register
                 </button>
 
-                <button onClick={() => navigate("/register")}>
-                    Create an account
-                </button>
             </form>
 
             {error && <p>{error}</p>}
+            {success && <p>{success}</p>}
+
+            <button onClick={() => navigate("/")}>
+                Back to Login
+            </button>
         </div>
     );
 };
 
-export default Login;
+export default Register;

@@ -23,8 +23,8 @@ POST http://localhost:5000/qte-prompts/
 Content-Type: application/json
 
 {
-    "key": "W",
-    "difficulty": "extreme",
+    "key": "d",
+    "difficulty": "easy",
     "timeLimit": 500,
     "points": 100
 }
@@ -46,9 +46,9 @@ Content-Type: application/json
 
 {
   "username": "Artoria",
-  "email": "arthur2@gmail.com",
+  "email": "arethur2@gmail.com",
   "password": "asjfsda",
-  "role": "user"
+  "role": "admin"
 }
 
 ### register user
