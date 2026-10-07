@@ -16,17 +16,15 @@ GET http://localhost:5000/qte-prompts?key=SPACE&difficulty=hard
 
 ### Get user
 GET http://localhost:5000/users/
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYzE1NzFkMWQwNzg4NmYzMDQyNjNiYiIsInJvbGUiOiJ1c2VyIiwiaWF0IjoxNzkxMDU2NDEyLCJleHAiOjE3OTEwNjAwMTJ9.HOSoNHW6RuOuh978CPL2ZnkEKdGxce-qc3o010j0DJs
+Authorization: BearereyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYzE1NzFkMWQwNzg4NmYzMDQyNjNiYiIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MTM0MTU4OSwiZXhwIjoxNzkxMzQ1MTg5fQ.dhEUrmMvm6r3mGNN2TbKGhS17y2PgX6tP75A4RoB_fk"
+
 
 ### Create Prompt
 POST http://localhost:5000/qte-prompts/
 Content-Type: application/json
 
 {
-    "key": "d",
-    "difficulty": "easy",
-    "timeLimit": 500,
-    "points": 100
+    "key": "r"
 }
 
 ### update prompt
@@ -35,9 +33,6 @@ Content-Type: application/json
 
 {
     "key": "W",
-    "difficulty": "easy",
-    "timeLimit": -1000,
-    "points": 100
 }
 
 ### create user
@@ -49,6 +44,17 @@ Content-Type: application/json
   "email": "arethur2@gmail.com",
   "password": "asjfsda",
   "role": "admin"
+}
+
+### create game
+POST http://localhost:5000/games/
+Content-Type: application/json
+
+{
+  "userId": "6ac39d1208768a2ea71e748c",
+  "mode": "singleplayer",
+  "finalTime": 22.53,
+  "wrongInputs": 3
 }
 
 ### register user

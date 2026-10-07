@@ -1,12 +1,12 @@
 const gameService = require("../services/gameService");
 
-const getGames = async (req, res) => {
+const getAllGames = async (req, res) => {
     const games = await gameService.getAllGames(req.query);
 
     res.status(200).json(games);
 };
 
-const getGame = async (req, res) => {
+const getGameById = async (req, res) => {
     const game = await gameService.getGameById(req.params.id);
 
     if (!game) {
@@ -49,14 +49,13 @@ const deleteGame = async (req, res) => {
     }
 
     res.status(200).json({
-        message: "Game deleted",
-        game
+        message: "Game deleted successfully"
     });
 };
 
 module.exports = {
-    getGames,
-    getGame,
+    getAllGames,
+    getGameById,
     createGame,
     updateGame,
     deleteGame

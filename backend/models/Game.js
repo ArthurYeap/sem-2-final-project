@@ -7,44 +7,32 @@ const gameSchema = new mongoose.Schema({
         required: true
     },
 
+    mode: {
+        type: String,
+        enum: ["singleplayer", "multiplayer"],
+        required: true
+    },
+
     roomId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Room"
     },
 
-    difficulty: {
-        type: String,
-        required: true
-    },
-
-    score: {
+    finalTime: {
         type: Number,
-        required: true
-    },
-
-    correctInputs: {
-        type: Number,
-        required: true
+        required: true,
+        min: 0
     },
 
     wrongInputs: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
 
-    missedInputs: {
+    rank: {
         type: Number,
-        required: true
-    },
-
-    highestCombo: {
-        type: Number,
-        required: true
-    },
-
-    averageReactionTime: {
-        type: Number,
-        required: true
+        min: 1
     },
 
     completedAt: {

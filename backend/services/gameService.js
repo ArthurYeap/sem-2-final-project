@@ -3,12 +3,20 @@ const Game = require("../models/Game");
 const getAllGames = async (filters = {}) => {
     const query = {};
 
-    if (filters.difficulty) {
-        query.difficulty = filters.difficulty;
+    if (filters.mode) {
+        query.mode = filters.mode;
     }
 
     if (filters.userId) {
         query.userId = filters.userId;
+    }
+
+    if (filters.roomId) {
+        query.roomId = filters.roomId;
+    }
+
+    if (filters.rank) {
+        query.rank = filters.rank;
     }
 
     return await Game.find(query)
