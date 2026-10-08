@@ -19,7 +19,11 @@ const getRoom = async (req, res) => {
 };
 
 const createRoom = async (req, res) => {
-    const room = await roomService.createRoom(req.body);
+    const room = await roomService.createRoom({
+        ...req.body,
+        hostId: req.user.id,
+        players: [req.user.id]
+    });
 
     res.status(201).json(room);
 };
