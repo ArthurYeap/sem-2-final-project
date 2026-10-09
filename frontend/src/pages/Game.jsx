@@ -1,6 +1,6 @@
+
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import socket from "../socket";
 
@@ -8,53 +8,52 @@ const Game = () => {
     const { user } = useAuth();
     const { roomCode } = useParams();
 
-    const [prompts, setPrompts] = useState([]);
-    const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
+    const [players, setPlayers] = useState([]);
     const [racePrompts, setRacePrompts] = useState([]);
+    const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
 
     const [raceTime, setRaceTime] = useState(0);
     const [startTime, setStartTime] = useState(null);
-    const [players, setPlayers] = useState([]);
-    const [penaltyTime, setPenaltyTime] = useState(0);
-
-    const [gameStarted, setGameStarted] = useState(false);
-    const [wrongInputs, setWrongInputs] = useState(0);
-    const [gameOverMessage, setGameOverMessage] = useState("");
-
     const [finishTime, setFinishTime] = useState(null);
     const [finalTime, setFinalTime] = useState(null);
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+    const [penaltyTime, setPenaltyTime] = useState(0);
+    const [wrongInputs, setWrongInputs] = useState(0);
 
-    // Socket.IO
+    const [gameStarted, setGameStarted] = useState(false);
+    const [timedOut, setTimedOut] = useState(false);
+
+    const [results, setResults] = useState(null);
+    const [error, setError] = useState("");
+    const [gameOverMessage, setGameOverMessage] = useState("");
+
     useEffect(() => {
-        if (!user) {
-            return;
-        }
+        if (!user || !roomCode) return;
 
         const handleConnect = () => {
-            console.log("Socket connected:", socket.id);
-
             socket.emit("joinRoom", {
-                roomCode: roomCode,
+                roomCode,
                 userId: user._id
             });
         };
 
         const handleGameStarted = (data) => {
             setRacePrompts(data.prompts);
+            setCurrentPromptIndex(0);
 
-            setGameOverMessage("");
+            setRaceTime(0);
+            setStartTime(Date.now());
             setFinishTime(null);
             setFinalTime(null);
-            setCurrentPromptIndex(0);
-            setRaceTime(0);
+
             setPenaltyTime(0);
             setWrongInputs(0);
 
             setGameStarted(true);
-            setStartTime(Date.now());
+            setTimedOut(false);
+            setResults(null);
+            setError("");
+            setGameOverMessage("");
         };
 
         const handleQteCorrect = (data) => {
@@ -67,8 +66,6 @@ const Game = () => {
         };
 
         const handlePlayerFinished = (data) => {
-            console.log("PLAYER FINISHED:", data.userId);
-
             if (data.userId.toString() === user._id.toString()) {
                 setFinishTime(Date.now());
                 setGameStarted(false);
@@ -76,42 +73,52 @@ const Game = () => {
         };
 
         const handlePlayerTimedOut = (data) => {
-            console.log("PLAYER TIMED OUT:", data.userId);
-
             if (data.userId.toString() === user._id.toString()) {
                 setGameStarted(false);
-                setFinishTime(Date.now());
+                setTimedOut(true);
                 setGameOverMessage(
                     "Time's up! You took too long to finish."
                 );
             }
         };
+
+        const handleRaceResults = (data) => {
+            setResults(data.results);
+            setGameStarted(false);
+            setGameOverMessage("");
+        };
+
         const handleGameOver = (data) => {
             if (data.winner === "opponentDisconnected") {
+                setGameStarted(false);
                 setGameOverMessage(
                     "You win! Your opponent disconnected."
                 );
-
-                setGameStarted(false);
             }
         };
 
-        const handleDisconnect = () => {
-            console.log("Socket disconnected");
-        };
-
         const handlePlayerListUpdated = (data) => {
-            console.log("Updated player list:", data.players);
-
             setPlayers(data.players);
         };
 
         const handleRoomError = (message) => {
-            console.log("Room error:", message);
+            setError(
+                typeof message === "string"
+                    ? message
+                    : message?.message || "A room error occurred."
+            );
         };
 
         const handleGameError = (message) => {
-            console.log("Game error:", message);
+            setError(
+                typeof message === "string"
+                    ? message
+                    : message?.message || "A game error occurred."
+            );
+        };
+
+        const handleDisconnect = () => {
+            console.log("Socket disconnected");
         };
 
         socket.on("connect", handleConnect);
@@ -125,6 +132,11 @@ const Game = () => {
         socket.on("qteCorrect", handleQteCorrect);
         socket.on("qteWrong", handleQteWrong);
         socket.on("playerFinished", handlePlayerFinished);
+        socket.on("raceResults", handleRaceResults);
+
+        if (socket.connected) {
+            handleConnect();
+        }
 
         return () => {
             socket.off("connect", handleConnect);
@@ -138,36 +150,16 @@ const Game = () => {
             socket.off("qteCorrect", handleQteCorrect);
             socket.off("qteWrong", handleQteWrong);
             socket.off("playerFinished", handlePlayerFinished);
+            socket.off("raceResults", handleRaceResults);
         };
-    }, [user]);
-
-    // Fetch QTE prompts
-    useEffect(() => {
-        const fetchPrompts = async () => {
-            try {
-                const response = await api.get("/qte-prompts");
-
-                setPrompts(response.data);
-
-            } catch (error) {
-                console.error("Failed to fetch prompts:", error);
-
-                setError("Failed to load QTE prompts");
-
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchPrompts();
-    }, []);
+    }, [user, roomCode]);
 
     const currentPrompt = racePrompts[currentPromptIndex];
 
-    // Handle keyboard input
+    // Keyboard input
     useEffect(() => {
         const handleKeyDown = (event) => {
-            if (!gameStarted || finishTime !== null) {
+            if (!gameStarted || finishTime !== null || timedOut) {
                 return;
             }
 
@@ -180,9 +172,7 @@ const Game = () => {
                 pressedKey = event.key.toUpperCase();
             }
 
-            socket.emit("qteInput", {
-                key: pressedKey
-            });
+            socket.emit("qteInput", { key: pressedKey });
         };
 
         window.addEventListener("keydown", handleKeyDown);
@@ -190,157 +180,163 @@ const Game = () => {
         return () => {
             window.removeEventListener("keydown", handleKeyDown);
         };
+    }, [gameStarted, finishTime, timedOut]);
 
-    }, [gameStarted, finishTime]);
-
-    // Start game
-
-    // Timer
+    // Race timer
     useEffect(() => {
-        if (!gameStarted || startTime === null) {
-            return;
-        }
+        if (!gameStarted || startTime === null) return;
 
         const timer = setInterval(() => {
             setRaceTime(Date.now() - startTime);
         }, 10);
 
-        return () => {
-            clearInterval(timer);
-        };
-
+        return () => clearInterval(timer);
     }, [gameStarted, startTime]);
 
-    // Calculate final time
+    // Calculate this player's final time
     useEffect(() => {
-        if (finishTime === null || startTime === null) {
-            return;
-        }
+        if (finishTime === null || startTime === null) return;
 
-        const totalTime =
-            (finishTime - startTime) + penaltyTime;
-
-        setFinalTime(totalTime);
-
+        setFinalTime(
+            (finishTime - startTime) + penaltyTime
+        );
     }, [finishTime, startTime, penaltyTime]);
 
-    // Save result to backend
-    useEffect(() => {
-        if (finalTime === null || !user) {
-            return;
-        }
-
-        const saveGame = async () => {
-            try {
-                const response = await api.post("/games", {
-                    userId: user._id,
-                    mode: "singleplayer",
-                    finalTime: finalTime,
-                    wrongInputs: wrongInputs
-                });
-
-                console.log("Game result saved!");
-                console.log("Saved game:", response.data);
-
-            } catch (error) {
-                console.error(
-                    "Failed to save game:",
-                    error.response?.data || error
-                );
-            }
-        };
-
-        saveGame();
-
-    }, [finalTime, user, wrongInputs]);
-
-    // Loading
-    if (loading) {
-        return <h1>Loading prompts...</h1>;
-    }
-
-    // Error
+    // Error screen
     if (error) {
-        return <h1>{error}</h1>;
+        return (
+            <div>
+                <h1>Error</h1>
+                <p>{error}</p>
+                <button onClick={() => setError("")}>
+                    Dismiss
+                </button>
+            </div>
+        );
     }
 
-    // Game finished
+    // Final multiplayer results
+    if (results) {
+        const myResult = results.find(
+            (result) =>
+                result.userId.toString() === user._id.toString()
+        );
+
+        return (
+            <div>
+                <h1>Race Results</h1>
+
+                {myResult && (
+                    <h2>
+                        {myResult.rank === 1
+                            ? "You Win!"
+                            : "Race Finished!"}
+                    </h2>
+                )}
+
+                {results.map((result) => (
+                    <div
+                        key={result.userId}
+                        style={{
+                            border: "1px solid #ccc",
+                            padding: "12px",
+                            marginBottom: "12px"
+                        }}
+                    >
+                        <h2>
+                            #{result.rank} — {result.username}
+                        </h2>
+
+                        <p>
+                            {result.timedOut
+                                ? "Timed out"
+                                : "Completed all 50 prompts"}
+                        </p>
+
+                        <p>
+                            Final Time:{" "}
+                            {(result.finalTime / 1000).toFixed(2)}s
+                        </p>
+
+                        <p>
+                            Wrong Inputs: {result.wrongInputs}
+                        </p>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    // Timeout or disconnection message
+    if (gameOverMessage) {
+        return (
+            <div>
+                <h1>{gameOverMessage}</h1>
+            </div>
+        );
+    }
+
+    // This player's local finish screen while waiting for opponent
     if (finalTime !== null) {
         return (
             <div>
-                <h1>Race Finished!</h1>
-
+                <h1>You Finished!</h1>
                 <h2>
-                    Final Time: {(finalTime / 1000).toFixed(2)}s
+                    Your Time: {(finalTime / 1000).toFixed(2)}s
                 </h2>
-
-                <p>
-                    Wrong Inputs: {wrongInputs}
-                </p>
+                <p>Wrong Inputs: {wrongInputs}</p>
+                <p>Waiting for your opponent to finish...</p>
             </div>
         );
     }
 
     return (
         <div>
-
-            {/* Waiting Lobby */}
-            <div>
-                <h1>Waiting Lobby</h1>
-
-                <h2>
-                    Players: {players.length}
-                </h2>
-
-                {players.map((player) => (
-                    <div key={player._id}>
-                        {player.username}
-                    </div>
-                ))}
-
-                {/* Temporary Start Game button */}
-                <button
-                    onClick={() => socket.emit("startGame")}
-                    disabled={players.length < 2 || gameStarted}
-                >
-                    {players.length < 2
-                        ? "Waiting for player..."
-                        : gameStarted
-                            ? "Game Started"
-                            : "Start Game"
-                    }
-                </button>
-            </div>
-
-            {gameOverMessage && (
+            {!gameStarted && (
                 <div>
-                    <h1>{gameOverMessage}</h1>
+                    <h1>Waiting Lobby</h1>
+                    <h2>Players: {players.length}</h2>
+
+                    {players.map((player) => (
+                        <div key={player._id}>
+                            {player.username}
+                        </div>
+                    ))}
+
+                    <button
+                        onClick={() => {
+                            setError("");
+                            socket.emit("startGame");
+                        }}
+                        disabled={players.length < 2}
+                    >
+                        {players.length < 2
+                            ? "Waiting for player..."
+                            : "Start Game"}
+                    </button>
                 </div>
             )}
-            {/* Race */}
-            <div>
-                <h1>Race Mode</h1>
 
-                <h2>
-                    Prompt {currentPromptIndex + 1} / 50
-                </h2>
+            {gameStarted && (
+                <div>
+                    <h1>Race Mode</h1>
 
-                {currentPrompt && (
-                    <h1>
-                        Press: {currentPrompt.key}
-                    </h1>
-                )}
+                    <h2>
+                        Prompt {currentPromptIndex + 1} / 50
+                    </h2>
 
-                <p>
-                    Time:{" "}
-                    {((raceTime + penaltyTime) / 1000).toFixed(2)}s
-                </p>
+                    {currentPrompt && (
+                        <h1>Press: {currentPrompt.key}</h1>
+                    )}
 
-                <p>
-                    Wrong Inputs: {wrongInputs}
-                </p>
-            </div>
+                    <p>
+                        Time:{" "}
+                        {((raceTime + penaltyTime) / 1000).toFixed(2)}s
+                    </p>
 
+                    <p>Wrong Inputs: {wrongInputs}</p>
+                </div>
+            )}
         </div>
     );
 };

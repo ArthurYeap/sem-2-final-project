@@ -5,6 +5,7 @@ const qteRoutes = require("./routes/qteRoutes");
 const roomRoutes = require("./routes/roomRoutes");
 const userRoutes = require("./routes/userRoutes");
 const QtePrompt = require("./models/QtePrompt");
+const Game = require("./models/Game");
 const requestLogger = require("./middleware/requestLogger");
 const notFound = require("./middleware/notFound");
 const errorHandler = require('./middleware/errorHandler');
@@ -17,6 +18,8 @@ const dns = require("dns");
 
 const raceStates = new Map();
 const racePromptsByRoom = new Map();
+const raceIdsByRoom = new Map();
+const finalizedRaces = new Set();
 
 dns.setServers([
     "1.1.1.1",
@@ -49,6 +52,113 @@ mongoose.connect(process.env.MONGO_URI, {
     .catch((error) => {
         console.error("MongoDB connection failed:", error);
     });
+
+const savePlayerResult = async (userId, roomId, state, raceId) => {
+    // Prevent duplicate saves for the same player.
+    if (state.resultSaved || state.resultSaving) {
+        return null;
+    }
+
+    state.resultSaving = true;
+
+    try {
+        const finalTime =
+            state.finishTime - state.startTime + state.penaltyTime;
+
+        const game = await Game.create({
+            userId,
+            mode: "multiplayer",
+            roomId,
+            raceId,
+            finalTime,
+            wrongInputs: state.wrongInputs,
+            timedOut: state.timedOut
+        });
+
+        state.resultSaved = true;
+        return game;
+    } catch (error) {
+        state.resultSaving = false;
+        throw error;
+    }
+};
+
+const checkRaceResults = async (roomCode, room) => {
+    const raceId = raceIdsByRoom.get(roomCode);
+
+    if (!raceId || finalizedRaces.has(raceId)) {
+        return;
+    }
+
+    const states = room.players.map((playerId) =>
+        raceStates.get(playerId.toString())
+    );
+
+    // Don't calculate results until every player has finished.
+    if (states.length < 2 || states.some(
+        (state) => !state || !state.finished || !state.resultSaved
+    )) {
+        return;
+    }
+
+    // Prevent both players' events from finalizing the race twice.
+    finalizedRaces.add(raceId);
+
+    try {
+        const results = await Game.find({
+            roomId: room._id,
+            raceId
+        }).populate("userId", "username");
+
+        // Completed races rank ahead of timeouts.
+        results.sort((a, b) => {
+            if (a.timedOut !== b.timedOut) {
+                return a.timedOut ? 1 : -1;
+            }
+
+            return a.finalTime - b.finalTime;
+        });
+
+        for (let i = 0; i < results.length; i++) {
+            results[i].rank = i + 1;
+            await results[i].save();
+        }
+
+        room.status = "finished";
+        await room.save();
+
+        io.to(roomCode).emit("raceResults", {
+            results: results.map((result) => ({
+                userId: result.userId._id.toString(),
+                username: result.userId.username,
+                finalTime: result.finalTime,
+                wrongInputs: result.wrongInputs,
+                timedOut: result.timedOut,
+                rank: result.rank
+            }))
+        });
+
+        // Clean up timers and temporary race state.
+        for (const playerId of room.players) {
+            const state = raceStates.get(playerId.toString());
+
+            if (state?.timeout) {
+                clearTimeout(state.timeout);
+            }
+
+            raceStates.delete(playerId.toString());
+        }
+
+        racePromptsByRoom.delete(roomCode);
+        raceIdsByRoom.delete(roomCode);
+        finalizedRaces.delete(raceId);
+
+        console.log(`Race ${raceId} results finalized.`);
+    } catch (error) {
+        finalizedRaces.delete(raceId);
+        console.error("Failed to finalize race results:", error);
+    }
+};
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -148,6 +258,8 @@ io.on("connection", (socket) => {
             );
 
             racePromptsByRoom.set(socket.roomCode, racePrompts);
+            const raceId = new mongoose.Types.ObjectId().toString();
+            raceIdsByRoom.set(socket.roomCode, raceId);
 
             room.players.forEach((playerId) => {
                 const startTime = Date.now();
@@ -158,9 +270,11 @@ io.on("connection", (socket) => {
                     wrongInputs: 0,
                     finished: false,
                     timedOut: false,
+                    resultSaved: false,
+                    resultSaving: false,
                     startTime,
                     finishTime: null,
-                    timeout: setTimeout(() => {
+                    timeout: setTimeout(async () => {
                         const state = raceStates.get(playerId.toString());
 
                         if (!state || state.finished) {
@@ -171,12 +285,33 @@ io.on("connection", (socket) => {
                         state.timedOut = true;
                         state.finishTime = Date.now();
 
-                        console.log(`${playerId} timed out after 3 minutes`);
+                        console.log(
+                            `${playerId} timed out after 3 minutes`
+                        );
+
+                        const finalTime =
+                            state.finishTime -
+                            state.startTime +
+                            state.penaltyTime;
+
+                        console.log(
+                            `${playerId} final time: ${finalTime}ms`
+                        );
+
+                        await savePlayerResult(
+                            playerId,
+                            room._id,
+                            state,
+                            raceId
+                        );
 
                         io.to(socket.roomCode).emit("playerTimedOut", {
                             userId: playerId.toString()
                         });
-                    }, 3 * 60 * 1000)
+
+                        await checkRaceResults(socket.roomCode, room);
+
+                    }, 60 * 1000)
                 });
             });
 
@@ -240,22 +375,36 @@ io.on("connection", (socket) => {
                     state.finished = true;
                     state.finishTime = Date.now();
 
+                    // The player finished, so cancel their timeout.
                     clearTimeout(state.timeout);
 
-                    const raceTime = state.finishTime - state.startTime;
-                    const finalTime = raceTime + state.penaltyTime;
+                    const raceId = raceIdsByRoom.get(socket.roomCode);
 
-                    console.log(`${socket.userId} final time: ${finalTime}ms`);
+                    console.log(
+                        `${socket.userId} final time: ${
+                            state.finishTime - state.startTime + state.penaltyTime
+                        }ms`
+                    );
+
+                    await savePlayerResult(
+                        socket.userId,
+                        room._id,
+                        state,
+                        raceId
+                    );
 
                     io.to(socket.roomCode).emit("playerFinished", {
                         userId: socket.userId.toString()
                     });
 
+                    await checkRaceResults(socket.roomCode, room);
+
                     return;
+
                 } else {
                     // Player is correct but has NOT finished yet, send next prompt data
                     socket.emit("qteCorrect", {
-                        nextPromptIndex: state.promptIndex
+                        promptIndex: state.promptIndex
                     });
                 }
             }

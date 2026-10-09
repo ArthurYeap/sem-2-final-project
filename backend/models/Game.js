@@ -38,6 +38,13 @@ const gameSchema = new mongoose.Schema({
     completedAt: {
         type: Date,
         default: Date.now
+    },
+    raceId: {
+        type: String,
+    },
+    timedOut: {
+        type: Boolean,
+        default: false
     }
 });
 

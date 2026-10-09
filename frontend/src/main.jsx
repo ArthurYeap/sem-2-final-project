@@ -5,6 +5,8 @@ import {AuthProvider} from './context/AuthContext.jsx'
 import Login from "./pages/Login.jsx";
 import Home from "./pages/Home.jsx";
 import NotFound from "./pages/NotFound.jsx";
+import Singleplayer
+    from "./pages/Singleplayer.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Admin from "./pages/Admin.jsx";
 import Register from "./pages/Register.jsx";
@@ -27,10 +29,10 @@ const router = createBrowserRouter([
         element: <Register />
     },
     {
-        path: "/game",
+        path: "/singleplayer",
         element: (
             <ProtectedRoute>
-                <Game />
+                <Singleplayer />
             </ProtectedRoute>
         )
     },
