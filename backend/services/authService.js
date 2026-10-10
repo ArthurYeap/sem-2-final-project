@@ -22,6 +22,7 @@ const register = async (data) => {
         role: "user"
     });
 
+    // ? taking out password and sending the rest of user information
     const { password, ...safeUser } = user.toObject();
 
     return safeUser;
@@ -53,12 +54,14 @@ const login = async (data) => {
 
     const token = jwt.sign(
         {
+            // !payload
             id: user._id,
             role: user.role
         },
+        // ?masterkey
         process.env.JWT_SECRET,
         {
-            expiresIn: "1h"
+            expiresIn: "24h"
         }
     );
 

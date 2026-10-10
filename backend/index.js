@@ -5,7 +5,7 @@ const qteRoutes = require("./routes/qteRoutes");
 const roomRoutes = require("./routes/roomRoutes");
 const userRoutes = require("./routes/userRoutes");
 const Game = require("./models/Game");
-const requestLogger = require("./middleware/requestLogger");
+
 const notFound = require("./middleware/notFound");
 const errorHandler = require('./middleware/errorHandler');
 require("dotenv").config();

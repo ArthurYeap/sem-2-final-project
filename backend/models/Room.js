@@ -29,11 +29,6 @@ const roomSchema = new mongoose.Schema({
         required: true
     },
 
-    currentPromptId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "QtePrompt"
-    },
-
     createdAt: {
         type: Date,
         default: Date.now

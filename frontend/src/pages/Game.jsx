@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import useGamepad from "../hooks/useGamepad";
 import { useAuth } from "../context/AuthContext";
 import socket from "../socket";
 
@@ -154,7 +155,25 @@ const Game = () => {
         };
     }, [user, roomCode]);
 
+    const handleGamepadInput = (pressedKey) => {
+        if (!gameStarted || finishTime !== null || timedOut) {
+            return;
+        }
+
+        socket.emit("qteInput", { key: pressedKey });
+    };
+
+    useGamepad(
+        handleGamepadInput,
+        gameStarted && finishTime === null && !timedOut
+    );
+
     const currentPrompt = racePrompts[currentPromptIndex];
+
+    const { connected: controllerConnected } = useGamepad(
+        handleGamepadInput,
+        gameStarted && finishTime === null && !timedOut
+    );
 
     // Keyboard input
     useEffect(() => {
@@ -296,6 +315,9 @@ const Game = () => {
                 <div>
                     <h1>Waiting Lobby</h1>
                     <h2>Players: {players.length}</h2>
+                    <p>
+                        Controller: {controllerConnected ? "Connected" : "Not detected"}
+                    </p>
 
                     {players.map((player) => (
                         <div key={player._id}>

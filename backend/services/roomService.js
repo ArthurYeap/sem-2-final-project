@@ -8,7 +8,6 @@ const getRoomById = async (id) => {
     return await Room.findById(id)
         .populate("hostId")
         .populate("players")
-        .populate("currentPromptId");
 };
 const createRoom = async (data) => {
     return await Room.create(data);

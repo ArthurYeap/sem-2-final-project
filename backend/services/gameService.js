@@ -19,9 +19,7 @@ const getAllGames = async (filters = {}) => {
         query.rank = filters.rank;
     }
 
-    return await Game.find(query)
-        .populate("userId")
-        .populate("roomId");
+    return await Game.find(query);
 };
 
 const getGameById = async (id) => {
@@ -38,6 +36,7 @@ const createGame = async (data) => {
 const updateGame = async (id, data) => {
     const updates = {};
 
+    // ?final time
     if (data.finalTime !== undefined) {
         const finalTime = Number(data.finalTime);
 
@@ -50,8 +49,10 @@ const updateGame = async (id, data) => {
         }
 
         updates.finalTime = finalTime;
+    // ?============================================================
     }
 
+    // !wrong inputs
     if (data.wrongInputs !== undefined) {
         const wrongInputs = Number(data.wrongInputs);
 
@@ -67,8 +68,10 @@ const updateGame = async (id, data) => {
         }
 
         updates.wrongInputs = wrongInputs;
+    //     !============================================
     }
 
+    // *timed out
     if (data.timedOut !== undefined) {
         if (typeof data.timedOut !== "boolean") {
             const error = new Error(
@@ -79,14 +82,17 @@ const updateGame = async (id, data) => {
         }
 
         updates.timedOut = data.timedOut;
+    //     *============================================
     }
 
+    // ! update field not empty
     if (Object.keys(updates).length === 0) {
         const error = new Error(
             "Please provide at least one valid field to update."
         );
         error.statusCode = 400;
         throw error;
+    //     !========================================
     }
 
     return await Game.findByIdAndUpdate(

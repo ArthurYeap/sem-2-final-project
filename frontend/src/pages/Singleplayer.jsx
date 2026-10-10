@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import useGamepad from "../hooks/useGamepad";
 
 const TOTAL_PROMPTS = 50;
 const TIME_LIMIT = 180000;
@@ -130,6 +131,37 @@ const Singleplayer = () => {
         setGameStarted(true);
     };
 
+    const handleGameInput = (pressedKey) => {
+        if (!gameStarted || finishedRef.current) return;
+
+        const currentPrompt = promptsRef.current[indexRef.current];
+
+        if (!currentPrompt) return;
+
+        if (pressedKey === currentPrompt.key.toUpperCase()) {
+            const nextIndex = indexRef.current + 1;
+
+            indexRef.current = nextIndex;
+            setCurrentPromptIndex(nextIndex);
+
+            if (nextIndex >= TOTAL_PROMPTS) {
+                saveResult(false);
+            }
+        } else {
+            penaltyRef.current += 2000;
+            wrongInputsRef.current += 1;
+
+            setPenaltyTime(penaltyRef.current);
+            setWrongInputs(wrongInputsRef.current);
+        }
+    };
+
+    useGamepad(handleGameInput, gameStarted);
+
+    const { connected: controllerConnected } = useGamepad(
+        handleGameInput,
+        gameStarted
+    );
     useEffect(() => {
         if (!gameStarted) return;
 
@@ -159,27 +191,7 @@ const Singleplayer = () => {
                 pressedKey = "SPACE";
             }
 
-            const currentPrompt =
-                promptsRef.current[indexRef.current];
-
-            if (!currentPrompt) return;
-
-            if (pressedKey === currentPrompt.key.toUpperCase()) {
-                const nextIndex = indexRef.current + 1;
-
-                indexRef.current = nextIndex;
-                setCurrentPromptIndex(nextIndex);
-
-                if (nextIndex >= TOTAL_PROMPTS) {
-                    saveResult(false);
-                }
-            } else {
-                penaltyRef.current += 2000;
-                wrongInputsRef.current += 1;
-
-                setPenaltyTime(penaltyRef.current);
-                setWrongInputs(wrongInputsRef.current);
-            }
+            handleGameInput(pressedKey);
         };
 
         window.addEventListener("keydown", handleKeyDown);
@@ -209,6 +221,9 @@ const Singleplayer = () => {
     return (
         <div>
             <h1>Single Player</h1>
+            <p>
+                Controller: {controllerConnected ? "Connected" : "Not detected"}
+            </p>
 
             {error && <p>{error}</p>}
 

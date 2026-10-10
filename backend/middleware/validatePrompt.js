@@ -1,3 +1,4 @@
+// ! make sure the field "key" is required
 const validatePrompt = (req, res, next) => {
     const { key } = req.body;
 
