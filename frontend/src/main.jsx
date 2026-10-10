@@ -12,6 +12,9 @@ import Admin from "./pages/Admin.jsx";
 import Register from "./pages/Register.jsx";
 import AdminRoute from "./components/AdminRoute.jsx";
 import Game from "./pages/Game";
+import AdminPrompts from "./pages/AdminPrompts.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminGames from "./pages/AdminGames.jsx";
 import GameHistory from "./pages/GameHistory.jsx";
 import CreateRoom from "./pages/CreateRoom.jsx";
 import './index.css'
@@ -25,6 +28,32 @@ const router = createBrowserRouter([
         path: "*",
         element: <NotFound />
     },
+
+    {
+        path: "/admin/prompts",
+        element: (
+            <AdminRoute>
+                <AdminPrompts />
+            </AdminRoute>
+        )
+    },
+    {
+        path: "/admin/users",
+        element: (
+            <AdminRoute>
+                <AdminUsers />
+            </AdminRoute>
+        )
+    },
+    {
+        path: "/admin/games",
+        element: (
+            <AdminRoute>
+                <AdminGames />
+            </AdminRoute>
+        )
+    },
+
     {
         path: "/game-history",
         element: (

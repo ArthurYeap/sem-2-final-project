@@ -30,7 +30,6 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
-app.use(requestLogger);
 
 app.use("/qte-prompts", qteRoutes);
 app.use("/rooms", roomRoutes);

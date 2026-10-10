@@ -77,6 +77,7 @@ const createGame = async (req, res) => {
     res.status(201).json(game);
 };
 
+
 const updateGame = async (req, res) => {
     const game = await gameService.updateGame(
         req.params.id,
@@ -89,8 +90,12 @@ const updateGame = async (req, res) => {
         });
     }
 
-    res.status(200).json(game);
+    res.status(200).json({
+        message: "Game record updated successfully",
+        game
+    });
 };
+
 
 const deleteGame = async (req, res) => {
     const game = await gameService.deleteGame(req.params.id);

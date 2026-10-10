@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 
+// !middleware to check if id exists
 const validateObjectId = (req, res, next) => {
     const { id } = req.params;
 

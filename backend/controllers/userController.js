@@ -39,7 +39,21 @@ const updateUser = async (req, res) => {
     res.status(200).json(user);
 };
 
+
 const deleteUser = async (req, res) => {
+    const currentUserId =
+        req.user.id || req.user.userId || req.user._id;
+
+    if (
+        // ? check if the current user id exist and if so is it the same as the id it's trying to delete
+        currentUserId &&
+        currentUserId.toString() === req.params.id
+    ) {
+        return res.status(403).json({
+            message: "You cannot delete your own account while logged in."
+        });
+    }
+
     const user = await userService.deleteUser(req.params.id);
 
     if (!user) {
@@ -50,7 +64,12 @@ const deleteUser = async (req, res) => {
 
     res.status(200).json({
         message: "User deleted",
-        user
+        user: {
+            _id: user._id,
+            username: user.username,
+            email: user.email,
+            role: user.role
+        }
     });
 };
 

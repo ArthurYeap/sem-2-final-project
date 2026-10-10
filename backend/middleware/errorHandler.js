@@ -1,4 +1,4 @@
-// !    catch error from asyncHandler
+// !    catch error from asyncHandler(sent by mongodb)
 const errorHandler = (error, req, res, next) => {
     console.error(error);
 
@@ -17,7 +17,7 @@ const errorHandler = (error, req, res, next) => {
         });
     }
 
-    // Duplicate value
+    //! Duplicate value for user
     if (error.code === 11000) {
         const field = Object.keys(error.keyPattern)[0];
 
@@ -25,13 +25,15 @@ const errorHandler = (error, req, res, next) => {
             message: `${field} already exists`
         });
     }
+    // !====================================================
     
-    // Unknown error
+    // ?Unknown error
     const statusCode = error.statusCode || 500;
 
     res.status(statusCode).json({
         message: error.message || "Something went wrong on the server"
     });
+//     ?========================================================
 };
 
 module.exports = errorHandler;
