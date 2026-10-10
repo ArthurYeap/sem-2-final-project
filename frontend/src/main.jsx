@@ -12,6 +12,7 @@ import Admin from "./pages/Admin.jsx";
 import Register from "./pages/Register.jsx";
 import AdminRoute from "./components/AdminRoute.jsx";
 import Game from "./pages/Game";
+import GameHistory from "./pages/GameHistory.jsx";
 import CreateRoom from "./pages/CreateRoom.jsx";
 import './index.css'
 
@@ -23,6 +24,14 @@ const router = createBrowserRouter([
     {
         path: "*",
         element: <NotFound />
+    },
+    {
+        path: "/game-history",
+        element: (
+            <ProtectedRoute>
+                <GameHistory />
+            </ProtectedRoute>
+        )
     },
     {
         path: "/register",

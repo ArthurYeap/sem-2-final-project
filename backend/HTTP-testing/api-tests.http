@@ -57,6 +57,12 @@ Content-Type: application/json
   "wrongInputs": 3
 }
 
+### get game
+GET http://localhost:5000/games/6ac6794a0e533b890e2571ea
+Content-Type: application/json
+Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYzY3OTRhMGU1MzNiODkwZTI1NzFlYSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MTUzOTEyMiwiZXhwIjoxNzkxNTQyNzIyfQ.MLJLt9bjyThh2SPkLhIHpaPzZ_5fLrOW2c2RwyYcubc
+
+
 ### register user
 POST http://localhost:5000/auth/register
 Content-Type: application/json
@@ -72,7 +78,7 @@ POST http://localhost:5000/auth/login
 Content-Type: application/json
 
 {
-  "username": "monokuma",
-  "email": "ono@gmail.com",
+  "username": "joe",
+  "email": "joe@gmail.com",
   "password": "1234"
 }

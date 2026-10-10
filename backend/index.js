@@ -4,7 +4,6 @@ const { Server } = require("socket.io");
 const qteRoutes = require("./routes/qteRoutes");
 const roomRoutes = require("./routes/roomRoutes");
 const userRoutes = require("./routes/userRoutes");
-const QtePrompt = require("./models/QtePrompt");
 const Game = require("./models/Game");
 const requestLogger = require("./middleware/requestLogger");
 const notFound = require("./middleware/notFound");
@@ -311,7 +310,7 @@ io.on("connection", (socket) => {
 
                         await checkRaceResults(socket.roomCode, room);
 
-                    }, 60 * 1000)
+                    }, 3 * 60 * 1000)
                 });
             });
 

@@ -8,14 +8,16 @@ const {
     deleteGame
 } = require("../controllers/gameController");
 
+const authMiddleware = require("../middleware/authMiddleware");
+const adminMiddleware = require("../middleware/adminMiddleware");
 const validateObjectId = require("../middleware/validateObjectId");
 const asyncHandler = require("../middleware/asyncHandler");
 
 const router = express.Router();
 
-router.get("/", asyncHandler(getGames));
+router.use(authMiddleware);
 
-router.post("/", asyncHandler(createGame));
+router.get("/", asyncHandler(getGames));
 
 router.get(
     "/:id",
@@ -23,14 +25,18 @@ router.get(
     asyncHandler(getGame)
 );
 
+router.post("/", asyncHandler(createGame));
+
 router.put(
     "/:id",
+    adminMiddleware,
     validateObjectId,
     asyncHandler(updateGame)
 );
 
 router.delete(
     "/:id",
+    adminMiddleware,
     validateObjectId,
     asyncHandler(deleteGame)
 );
