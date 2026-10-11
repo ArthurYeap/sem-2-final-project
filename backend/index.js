@@ -41,6 +41,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 mongoose.connect(process.env.MONGO_URI, {
+    // ? family changes the DNS resolution to IPv4,while serverSelectionTimeoutMS sets a 10 second timeout for connection to db.
     family: 4,
     serverSelectionTimeoutMS: 10000
 })
@@ -52,7 +53,7 @@ mongoose.connect(process.env.MONGO_URI, {
     });
 
 const savePlayerResult = async (userId, roomId, state, raceId) => {
-    // Prevent duplicate saves for the same player.
+    //! Prevent duplicate saves for the same player.
     if (state.resultSaved || state.resultSaving) {
         return null;
     }
@@ -60,6 +61,7 @@ const savePlayerResult = async (userId, roomId, state, raceId) => {
     state.resultSaving = true;
 
     try {
+        // ? Calculate the final time including penalties.
         const finalTime =
             state.finishTime - state.startTime + state.penaltyTime;
 
@@ -81,6 +83,7 @@ const savePlayerResult = async (userId, roomId, state, raceId) => {
     }
 };
 
+// !show race results when all players have finished or timed out
 const checkRaceResults = async (roomCode, room) => {
     const raceId = raceIdsByRoom.get(roomCode);
 
@@ -88,18 +91,19 @@ const checkRaceResults = async (roomCode, room) => {
         return;
     }
 
+    // *retrieving results of all players in the room
     const states = room.players.map((playerId) =>
         raceStates.get(playerId.toString())
     );
 
-    // Don't calculate results until every player has finished.
+    //! Don't calculate results until every player has finished.
     if (states.length < 2 || states.some(
         (state) => !state || !state.finished || !state.resultSaved
     )) {
         return;
     }
 
-    // Prevent both players' events from finalizing the race twice.
+    // ?Prevent both players' events from finalizing the race twice.
     finalizedRaces.add(raceId);
 
     try {
@@ -108,7 +112,7 @@ const checkRaceResults = async (roomCode, room) => {
             raceId
         }).populate("userId", "username");
 
-        // Completed races rank ahead of timeouts.
+        // !sorting results by completion time
         results.sort((a, b) => {
             if (a.timedOut !== b.timedOut) {
                 return a.timedOut ? 1 : -1;
@@ -117,6 +121,7 @@ const checkRaceResults = async (roomCode, room) => {
             return a.finalTime - b.finalTime;
         });
 
+        // !assigning ranking to players
         for (let i = 0; i < results.length; i++) {
             results[i].rank = i + 1;
             await results[i].save();
@@ -136,7 +141,7 @@ const checkRaceResults = async (roomCode, room) => {
             }))
         });
 
-        // Clean up timers and temporary race state.
+        // ? Clean up timers and temporary race state.
         for (const playerId of room.players) {
             const state = raceStates.get(playerId.toString());
 
@@ -166,21 +171,15 @@ const io = new Server(server, {
     }
 });
 
-// ==========================================
-// === MAIN SOCKET CONNECTION OPEN ===
-// ==========================================
+
+// *Connection listener for server
 io.on("connection", (socket) => {
     console.log("SOCKET CONNECTED:", socket.id);
 
-    // ------------------------------------------
-    // 1. JOIN ROOM LISTENER
-    // ------------------------------------------
+    // !join room listener
     socket.on("joinRoom", async ({ roomCode, userId }) => {
         try {
             const Room = require("./models/Room");
-
-            console.log("Room code:", roomCode);
-            console.log("User ID:", userId);
 
             const room = await Room.findOne({ roomCode });
 
@@ -193,20 +192,22 @@ io.on("connection", (socket) => {
             socket.userId = userId;
             socket.roomCode = roomCode;
 
+            // ? add the user to the room's player list
             if (!room.players.includes(userId)) {
                 room.players.push(userId);
                 await room.save();
             }
+            // ?==========================================
 
             socket.join(roomCode);
-            console.log(`${userId} joined room ${roomCode}`);
 
-            const updatedRoom = await Room.findById(room._id)
-                .populate("players", "username");
+            await room.populate({ path: "players", select: "username" });
 
+
+            // !send the updated player list to all clients in the room
             io.to(roomCode).emit("playerListUpdated", {
                 roomCode: roomCode,
-                players: updatedRoom.players
+                players: room.players
             });
 
         } catch (error) {
@@ -215,14 +216,13 @@ io.on("connection", (socket) => {
         }
     });
 
-    // ------------------------------------------
-    // 2. START GAME LISTENER
-    // ------------------------------------------
+    // ?start game listener
     socket.on("startGame", async () => {
         try {
             const Room = require("./models/Room");
             const QtePrompt = require("./models/QtePrompt");
 
+            // *check if the user id exist and if user is in the room
             if (!socket.userId || !socket.roomCode) {
                 socket.emit("gameError", "You are not in a room");
                 return;
@@ -230,11 +230,13 @@ io.on("connection", (socket) => {
 
             const room = await Room.findOne({ roomCode: socket.roomCode });
 
+            // *check if the room exists
             if (!room) {
                 socket.emit("gameError", "Room not found");
                 return;
             }
 
+            //! check if the user is the host of the room
             if (room.hostId.toString() !== socket.userId.toString()) {
                 socket.emit("gameError", "Only the host can start the game");
                 return;
@@ -247,6 +249,7 @@ io.on("connection", (socket) => {
                 return;
             }
 
+            // ! Generate 50 random prompts for the race
             const racePrompts = Array.from(
                 { length: 50 },
                 () => {
@@ -256,12 +259,14 @@ io.on("connection", (socket) => {
             );
 
             racePromptsByRoom.set(socket.roomCode, racePrompts);
+            // !generate a unique raceId for this game session and store it in the map
             const raceId = new mongoose.Types.ObjectId().toString();
             raceIdsByRoom.set(socket.roomCode, raceId);
 
             room.players.forEach((playerId) => {
                 const startTime = Date.now();
 
+                //! initilaze the default state for every player
                 raceStates.set(playerId.toString(), {
                     promptIndex: 0,
                     penaltyTime: 0,
@@ -272,6 +277,8 @@ io.on("connection", (socket) => {
                     resultSaving: false,
                     startTime,
                     finishTime: null,
+
+                    //*timeout setter
                     timeout: setTimeout(async () => {
                         const state = raceStates.get(playerId.toString());
 
@@ -316,8 +323,7 @@ io.on("connection", (socket) => {
             room.status = "playing";
             await room.save();
 
-            console.log(`${socket.userId} started room ${socket.roomCode}`);
-
+            // !send the prompts to all players in the room
             io.to(socket.roomCode).emit("gameStarted", {
                 prompts: racePrompts
             });
@@ -326,13 +332,12 @@ io.on("connection", (socket) => {
             console.error("Failed to start game:", error);
             socket.emit("gameError", "Failed to start game");
         }
-    }); // Closes startGame listener safely!
+    });
 
-    // ------------------------------------------
-    // 3. QTE INPUT LISTENER (Moved completely outside startGame)
-    // ------------------------------------------
+    // *QTE input listener
     socket.on("qteInput", async ({ key }) => {
         try {
+    // !invalid checking
             if (!socket.userId || !socket.roomCode) {
                 return;
             }
@@ -361,28 +366,21 @@ io.on("connection", (socket) => {
             if (!currentPrompt) {
                 return;
             }
+        // !==================================================
 
-            console.log(`${socket.userId} pressed ${key}, expected ${currentPrompt.key}`);
-
-            // === 1. Correct Input Condition ===
+            //!correct key input
             if (key === currentPrompt.key) {
                 state.promptIndex++;
 
-                // Player finished all 50 prompts
+                // ! Player has finished all prompts
                 if (state.promptIndex >= 50) {
                     state.finished = true;
                     state.finishTime = Date.now();
 
-                    // The player finished, so cancel their timeout.
                     clearTimeout(state.timeout);
 
                     const raceId = raceIdsByRoom.get(socket.roomCode);
 
-                    console.log(
-                        `${socket.userId} final time: ${
-                            state.finishTime - state.startTime + state.penaltyTime
-                        }ms`
-                    );
 
                     await savePlayerResult(
                         socket.userId,
@@ -406,7 +404,7 @@ io.on("connection", (socket) => {
                     });
                 }
             }
-            // === 2. Wrong Input Condition ===
+            // *wrong key input
             else {
                 state.wrongInputs++;
                 state.penaltyTime += 2000;
@@ -420,12 +418,9 @@ io.on("connection", (socket) => {
         } catch (error) {
             console.error("Failed to process QTE input:", error);
         }
-    }); // Closes qteInput listener safely!
+    });
 
-    // ------------------------------------------
-    // 4. DISCONNECT LISTENER
-    // ------------------------------------------
-
+    // ?disconnect listener
     socket.on("disconnect", async (reason) => {
         try {
             console.log("SOCKET DISCONNECTED:", socket.id, reason);
@@ -446,16 +441,15 @@ io.on("connection", (socket) => {
 
             const wasPlaying = room.status === "playing";
 
+            // * Remove the disconnected player.
             room.players = room.players.filter(
                 (playerId) =>
                     playerId.toString() !== socket.userId.toString()
             );
 
-            await room.save();
-
-            if (wasPlaying) {
+            //! Only end the game if 1 or fewer players remain.
+            if (wasPlaying && room.players.length <= 1) {
                 room.status = "finished";
-
                 await room.save();
 
                 io.to(socket.roomCode).emit("gameOver", {
@@ -465,6 +459,10 @@ io.on("connection", (socket) => {
                 return;
             }
 
+            //? Save the updated player list.
+            await room.save();
+
+            //! Update the remaining players in the room.
             const updatedRoom = await Room.findById(room._id)
                 .populate("players", "username");
 
@@ -480,12 +478,8 @@ io.on("connection", (socket) => {
             );
         }
     });
-}); // <-- THIS closes io.on("connection")
+});
 
-
-// ==========================================
-// START SERVER
-// ==========================================
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

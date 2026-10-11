@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import useGamepad from "../hooks/useGamepad";
+import getPromptDisplay from "../utils/getPromptDisplay";
 import { useAuth } from "../context/AuthContext";
 import socket from "../socket";
 
@@ -14,6 +15,7 @@ const Game = () => {
     const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
 
     const [raceTime, setRaceTime] = useState(0);
+    const [displayMode, setDisplayMode] = useState("keyboard");
     const [startTime, setStartTime] = useState(null);
     const [finishTime, setFinishTime] = useState(null);
     const [finalTime, setFinalTime] = useState(null);
@@ -163,17 +165,18 @@ const Game = () => {
         socket.emit("qteInput", { key: pressedKey });
     };
 
-    useGamepad(
-        handleGamepadInput,
-        gameStarted && finishTime === null && !timedOut
-    );
-
     const currentPrompt = racePrompts[currentPromptIndex];
 
     const { connected: controllerConnected } = useGamepad(
         handleGamepadInput,
         gameStarted && finishTime === null && !timedOut
     );
+
+    useEffect(() => {
+        if (!controllerConnected && displayMode !== "keyboard") {
+            setDisplayMode("keyboard");
+        }
+    }, [controllerConnected, displayMode]);
 
     // Keyboard input
     useEffect(() => {
@@ -185,14 +188,26 @@ const Game = () => {
             let pressedKey;
 
             if (event.code === "Space") {
-                pressedKey = "SPACE";
                 event.preventDefault();
+                pressedKey = "SPACE";
+            } else if (event.code === "ArrowUp") {
+                event.preventDefault();
+                pressedKey = "UP";
+            } else if (event.code === "ArrowDown") {
+                event.preventDefault();
+                pressedKey = "DOWN";
+            } else if (event.code === "ArrowLeft") {
+                event.preventDefault();
+                pressedKey = "LEFT";
+            } else if (event.code === "ArrowRight") {
+                event.preventDefault();
+                pressedKey = "RIGHT";
             } else {
                 pressedKey = event.key.toUpperCase();
             }
 
-            socket.emit("qteInput", { key: pressedKey });
-        };
+
+            socket.emit("qteInput", { key: pressedKey });        };
 
         window.addEventListener("keydown", handleKeyDown);
 
@@ -319,6 +334,24 @@ const Game = () => {
                         Controller: {controllerConnected ? "Connected" : "Not detected"}
                     </p>
 
+                    {controllerConnected && (
+                        <div>
+                            <label htmlFor="input-display">
+                                Input Display:
+                            </label>
+
+                            <select
+                                id="input-display"
+                                value={displayMode}
+                                onChange={(event) => setDisplayMode(event.target.value)}
+                            >
+                                <option value="keyboard">Keyboard</option>
+                                <option value="xbox">Xbox Controller</option>
+                                <option value="dualshock">DualShock 4</option>
+                            </select>
+                        </div>
+                    )}
+
                     {players.map((player) => (
                         <div key={player._id}>
                             {player.username}
@@ -348,7 +381,9 @@ const Game = () => {
                     </h2>
 
                     {currentPrompt && (
-                        <h1>Press: {currentPrompt.key}</h1>
+                        <h1>
+                            Press: {getPromptDisplay(currentPrompt.key, displayMode)}
+                        </h1>
                     )}
 
                     <p>

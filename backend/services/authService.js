@@ -3,6 +3,12 @@ const bcrypt = require("bcrypt");
 const User = require("../models/User");
 
 const register = async (data) => {
+    if (!data.password || data.password.length < 8) {
+        const error = new Error("Password must be at least 8 characters long");
+        error.statusCode = 400; // Bad Request
+        throw error;
+    }
+
     const existingUser = await User.findOne({
         email: data.email
     });

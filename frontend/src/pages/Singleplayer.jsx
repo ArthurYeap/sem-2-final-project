@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import getPromptDisplay from "../utils/getPromptDisplay";
 import useGamepad from "../hooks/useGamepad";
 
 const TOTAL_PROMPTS = 50;
@@ -13,6 +14,7 @@ const Singleplayer = () => {
     const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
     const [wrongInputs, setWrongInputs] = useState(0);
     const [penaltyTime, setPenaltyTime] = useState(0);
+    const [displayMode, setDisplayMode] = useState("keyboard");
     const [elapsedTime, setElapsedTime] = useState(0);
 
     const [gameStarted, setGameStarted] = useState(false);
@@ -156,12 +158,18 @@ const Singleplayer = () => {
         }
     };
 
-    useGamepad(handleGameInput, gameStarted);
 
     const { connected: controllerConnected } = useGamepad(
         handleGameInput,
         gameStarted
     );
+
+    useEffect(() => {
+        if (!controllerConnected && displayMode !== "keyboard") {
+            setDisplayMode("keyboard");
+
+        }
+    }, [controllerConnected, displayMode]);
     useEffect(() => {
         if (!gameStarted) return;
 
@@ -184,11 +192,25 @@ const Singleplayer = () => {
         const handleKeyDown = (event) => {
             if (event.repeat || finishedRef.current) return;
 
-            let pressedKey = event.key.toUpperCase();
+            let pressedKey;
 
             if (event.code === "Space") {
                 event.preventDefault();
                 pressedKey = "SPACE";
+            } else if (event.code === "ArrowUp") {
+                event.preventDefault();
+                pressedKey = "UP";
+            } else if (event.code === "ArrowDown") {
+                event.preventDefault();
+                pressedKey = "DOWN";
+            } else if (event.code === "ArrowLeft") {
+                event.preventDefault();
+                pressedKey = "LEFT";
+            } else if (event.code === "ArrowRight") {
+                event.preventDefault();
+                pressedKey = "RIGHT";
+            } else {
+                pressedKey = event.key.toUpperCase();
             }
 
             handleGameInput(pressedKey);
@@ -225,6 +247,24 @@ const Singleplayer = () => {
                 Controller: {controllerConnected ? "Connected" : "Not detected"}
             </p>
 
+            {controllerConnected && (
+                <div>
+                    <label htmlFor="input-display">
+                        Input Display:
+                    </label>
+
+                    <select
+                        id="input-display"
+                        value={displayMode}
+                        onChange={(event) => setDisplayMode(event.target.value)}
+                    >
+                        <option value="keyboard">Keyboard</option>
+                        <option value="xbox">Xbox Controller</option>
+                        <option value="dualshock">DualShock 4</option>
+                    </select>
+                </div>
+            )}
+
             {error && <p>{error}</p>}
 
             {!gameStarted && !gameOver && (
@@ -240,7 +280,11 @@ const Singleplayer = () => {
                     </h2>
 
                     <h1>
-                        {promptsRef.current[currentPromptIndex]?.key}
+                        {promptsRef.current[currentPromptIndex] &&
+                            getPromptDisplay(
+                                promptsRef.current[currentPromptIndex].key,
+                                displayMode
+                            )}
                     </h1>
 
                     <p>
