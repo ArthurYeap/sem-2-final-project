@@ -16,6 +16,7 @@ const mongoose = require("mongoose");
 const dns = require("dns");
 
 const raceStates = new Map();
+const readyPlayersByRoom = new Map();
 const racePromptsByRoom = new Map();
 const raceIdsByRoom = new Map();
 const finalizedRaces = new Set();
@@ -71,8 +72,10 @@ const savePlayerResult = async (userId, roomId, state, raceId) => {
             roomId,
             raceId,
             finalTime,
+            difficulty: state.difficulty,
             wrongInputs: state.wrongInputs,
-            timedOut: state.timedOut
+            timedOut: state.timedOut,
+            forfeited: state.forfeited || false
         });
 
         state.resultSaved = true;
@@ -103,6 +106,14 @@ const checkRaceResults = async (roomCode, room) => {
         return;
     }
 
+    console.log("Race states:", states.map((state) => ({
+        finished: state?.finished,
+        timedOut: state?.timedOut,
+        forfeited: state?.forfeited,
+        resultSaved: state?.resultSaved,
+        resultSaving: state?.resultSaving
+    })));
+
     // ?Prevent both players' events from finalizing the race twice.
     finalizedRaces.add(raceId);
 
@@ -112,10 +123,20 @@ const checkRaceResults = async (roomCode, room) => {
             raceId
         }).populate("userId", "username");
 
+        const getOutcomePriority = (result) => {
+            if (!result.timedOut && !result.forfeited) return 0;
+            if (result.forfeited) return 1;
+            return 2;
+        };
+
         // !sorting results by completion time
+
         results.sort((a, b) => {
-            if (a.timedOut !== b.timedOut) {
-                return a.timedOut ? 1 : -1;
+            const priorityDifference =
+                getOutcomePriority(a) - getOutcomePriority(b);
+
+            if (priorityDifference !== 0) {
+                return priorityDifference;
             }
 
             return a.finalTime - b.finalTime;
@@ -127,8 +148,11 @@ const checkRaceResults = async (roomCode, room) => {
             await results[i].save();
         }
 
-        room.status = "finished";
+        room.status = "waiting";
         await room.save();
+
+        // *Clear previous race readiness.
+        readyPlayersByRoom.set(roomCode, new Set());
 
         io.to(roomCode).emit("raceResults", {
             results: results.map((result) => ({
@@ -137,7 +161,9 @@ const checkRaceResults = async (roomCode, room) => {
                 finalTime: result.finalTime,
                 wrongInputs: result.wrongInputs,
                 timedOut: result.timedOut,
+                forfeited: result.forfeited,
                 rank: result.rank
+
             }))
         });
 
@@ -189,25 +215,35 @@ io.on("connection", (socket) => {
                 return;
             }
 
+            // ? Initialize the ready players set for this room if it doesn't exist
+            if (!readyPlayersByRoom.has(roomCode)) {
+                readyPlayersByRoom.set(roomCode, new Set());
+            }
+
             socket.userId = userId;
             socket.roomCode = roomCode;
 
-            // ? add the user to the room's player list
-            if (!room.players.includes(userId)) {
-                room.players.push(userId);
-                await room.save();
-            }
-            // ?==========================================
+            await Room.updateOne(
+                { _id: room._id },
+                { $addToSet: { players: userId } }
+            );
 
             socket.join(roomCode);
 
-            await room.populate({ path: "players", select: "username" });
+
+            const updatedRoom = await Room.findOne({ roomCode })
+                .populate("players", "username");
 
 
             // !send the updated player list to all clients in the room
             io.to(roomCode).emit("playerListUpdated", {
-                roomCode: roomCode,
-                players: room.players
+                roomCode,
+                players: updatedRoom.players,
+                readyPlayers: [
+                    ...(readyPlayersByRoom.get(roomCode) || new Set())
+                ],
+                hostId: updatedRoom.hostId.toString(),
+                difficulty: updatedRoom.difficulty
             });
 
         } catch (error) {
@@ -215,6 +251,131 @@ io.on("connection", (socket) => {
             socket.emit("roomError", "Failed to join room");
         }
     });
+
+    // *ready listener
+    socket.on("toggleReady", async ({ ready }) => {
+        try {
+            // !invalid checking
+            const Room = require("./models/Room");
+
+            if (!socket.userId || !socket.roomCode) {
+                socket.emit("gameError", "You are not in a room");
+                return;
+            }
+
+            const room = await Room.findOne({
+                roomCode: socket.roomCode
+            });
+
+            if (!room) {
+                socket.emit("gameError", "Room not found");
+                return;
+            }
+
+            if (room.status === "playing") {
+                socket.emit("gameError", "The game has already started");
+                return;
+            }
+
+            if (room.status === "finished") {
+                socket.emit("gameError", "This game has already finished");
+                return;
+            }
+            const isPlayerInRoom = room.players.some(
+                (playerId) =>
+                    playerId.toString() === socket.userId.toString()
+            );
+
+            if (!isPlayerInRoom) {
+                socket.emit("gameError", "You are not a player in this room");
+                return;
+            }
+            // !=================================================
+            if (!readyPlayersByRoom.has(socket.roomCode)) {
+                readyPlayersByRoom.set(socket.roomCode, new Set());
+            }
+
+            const readyPlayers = readyPlayersByRoom.get(socket.roomCode);
+            const userId = socket.userId.toString();
+
+            if (ready === true) {
+                readyPlayers.add(userId);
+            } else {
+                readyPlayers.delete(userId);
+            }
+
+            io.to(socket.roomCode).emit("readyStatusUpdated", {
+                readyPlayers: [...readyPlayers]
+            });
+
+        } catch (error) {
+            console.error("Failed to update ready status:", error);
+            socket.emit("gameError", "Failed to update ready status");
+        }
+    });
+
+    // ? prompt timer listener
+    const startPromptTimer = (userId, roomCode, room, raceId) => {
+        const id = userId.toString();
+        const state = raceStates.get(id);
+
+        if (!state || state.finished) {
+            return;
+        }
+
+        // ! Clear any existing prompt timer before starting a new one.
+        clearTimeout(state.promptTimeout);
+
+        state.promptTimeout = setTimeout(async () => {
+            try {
+                // * declare state again incase state get cleared while timeout haven't run
+                const currentState = raceStates.get(id);
+
+                if (!currentState || currentState.finished) {
+                    return;
+                }
+
+                currentState.wrongInputs++;
+                currentState.penaltyTime += 1000;
+                currentState.promptIndex++;
+
+                io.to(roomCode).emit("promptExpired", {
+                    userId: id,
+                    promptIndex: currentState.promptIndex,
+                    wrongInputs: currentState.wrongInputs,
+                    penaltyTime: currentState.penaltyTime
+                });
+
+                //? Expiring the final prompt still finishes the game.
+                if (currentState.promptIndex >= 50) {
+                    currentState.finished = true;
+                    currentState.finishTime = Date.now();
+
+                    clearTimeout(currentState.timeout);
+                    clearTimeout(currentState.promptTimeout);
+
+                    await savePlayerResult(
+                        userId,
+                        room._id,
+                        currentState,
+                        raceId
+                    );
+
+                    io.to(roomCode).emit("playerFinished", {
+                        userId: id
+                    });
+
+                    await checkRaceResults(roomCode, room);
+                    return;
+                }
+
+                // !Start the timer for the next prompt.
+                startPromptTimer(userId, roomCode, room, raceId);
+            } catch (error) {
+                console.error("Failed to process prompt timeout:", error);
+            }
+        }, state.promptDuration);
+    };
 
     // ?start game listener
     socket.on("startGame", async () => {
@@ -242,6 +403,24 @@ io.on("connection", (socket) => {
                 return;
             }
 
+            if (room.players.length < 2) {
+                socket.emit("gameError", "At least 2 players are required");
+                return;
+            }
+
+            //? Check if readyPlayersByRoom has roomCode else create a new set
+            const readyPlayers =
+                readyPlayersByRoom.get(socket.roomCode) || new Set();
+
+            const everyoneReady = room.players.every(
+                (playerId) => readyPlayers.has(playerId.toString())
+            );
+
+            if (!everyoneReady) {
+                socket.emit("gameError", "Everyone must be ready before starting");
+                return;
+            }
+
             const prompts = await QtePrompt.find();
 
             if (prompts.length === 0) {
@@ -261,6 +440,11 @@ io.on("connection", (socket) => {
             racePromptsByRoom.set(socket.roomCode, racePrompts);
             // !generate a unique raceId for this game session and store it in the map
             const raceId = new mongoose.Types.ObjectId().toString();
+            const difficulty =
+                room.difficulty === "hard" ? "hard" : "normal";
+
+            const promptDuration =
+                difficulty === "hard" ? 500 : 1000;
             raceIdsByRoom.set(socket.roomCode, raceId);
 
             room.players.forEach((playerId) => {
@@ -275,6 +459,9 @@ io.on("connection", (socket) => {
                     timedOut: false,
                     resultSaved: false,
                     resultSaving: false,
+                    difficulty,
+                    promptDuration,
+                    promptTimeout: null,
                     startTime,
                     finishTime: null,
 
@@ -288,20 +475,10 @@ io.on("connection", (socket) => {
 
                         state.finished = true;
                         state.timedOut = true;
+                        state.forfeited = false;
                         state.finishTime = Date.now();
 
-                        console.log(
-                            `${playerId} timed out after 3 minutes`
-                        );
-
-                        const finalTime =
-                            state.finishTime -
-                            state.startTime +
-                            state.penaltyTime;
-
-                        console.log(
-                            `${playerId} final time: ${finalTime}ms`
-                        );
+                        clearTimeout(state.promptTimeout);
 
                         await savePlayerResult(
                             playerId,
@@ -316,8 +493,15 @@ io.on("connection", (socket) => {
 
                         await checkRaceResults(socket.roomCode, room);
 
-                    }, 3 * 60 * 1000)
-                });
+                    }, 120 * 1000)
+                }
+                   );
+                startPromptTimer(
+                    playerId,
+                    socket.roomCode,
+                    room,
+                    raceId
+                );
             });
 
             room.status = "playing";
@@ -344,7 +528,7 @@ io.on("connection", (socket) => {
 
             const state = raceStates.get(socket.userId.toString());
 
-            if (!state) {
+            if (!state || state.finished || state.timedOut) {
                 return;
             }
 
@@ -371,6 +555,7 @@ io.on("connection", (socket) => {
             //!correct key input
             if (key === currentPrompt.key) {
                 state.promptIndex++;
+                clearTimeout(state.promptTimeout);
 
                 // ! Player has finished all prompts
                 if (state.promptIndex >= 50) {
@@ -398,16 +583,22 @@ io.on("connection", (socket) => {
                     return;
 
                 } else {
-                    // Player is correct but has NOT finished yet, send next prompt data
+                    // ? Player is correct but has NOT finished yet, send next prompt data
                     socket.emit("qteCorrect", {
                         promptIndex: state.promptIndex
                     });
+                    startPromptTimer(
+                        socket.userId,
+                        socket.roomCode,
+                        room,
+                        raceIdsByRoom.get(socket.roomCode)
+                    );
                 }
             }
             // *wrong key input
             else {
                 state.wrongInputs++;
-                state.penaltyTime += 2000;
+                state.penaltyTime += 1000;
 
                 socket.emit("qteWrong", {
                     wrongInputs: state.wrongInputs,
@@ -420,12 +611,156 @@ io.on("connection", (socket) => {
         }
     });
 
-    // ?disconnect listener
-    socket.on("disconnect", async (reason) => {
+    // ? change difficulty listener
+    socket.on("changeDifficulty", async ({ difficulty }) => {
         try {
-            console.log("SOCKET DISCONNECTED:", socket.id, reason);
+            const Room = require("./models/Room");
 
             if (!socket.userId || !socket.roomCode) {
+                socket.emit("gameError", "You are not in a room");
+                return;
+            }
+
+            // !Only allow valid difficulty values.
+            if (!["normal", "hard"].includes(difficulty)) {
+                socket.emit("gameError", "Invalid difficulty");
+                return;
+            }
+
+            const room = await Room.findOne({
+                roomCode: socket.roomCode
+            });
+
+            if (!room) {
+                socket.emit("gameError", "Room not found");
+                return;
+            }
+
+            if (room.hostId.toString() !== socket.userId.toString()) {
+                socket.emit("gameError", "Only the host can change difficulty");
+                return;
+            }
+
+            if (room.status !== "waiting") {
+                socket.emit(
+                    "gameError",
+                    "Difficulty can only be changed in the waiting room"
+                );
+                return;
+            }
+
+            room.difficulty = difficulty;
+            await room.save();
+
+            // Everyone in the room receives the updated difficulty.
+            io.to(socket.roomCode).emit("difficultyUpdated", {
+                difficulty: room.difficulty
+            });
+
+        } catch (error) {
+            console.error("Failed to change difficulty:", error);
+            socket.emit("gameError", "Failed to change difficulty");
+        }
+    });
+
+    // ! forfeit listener
+    socket.on("forfeitGame", async () => {
+        try {
+            if (!socket.userId || !socket.roomCode) {
+                return;
+            }
+
+            const Room = require("./models/Room");
+
+            const userId = socket.userId.toString();
+            const roomCode = socket.roomCode;
+            const room = await Room.findOne({ roomCode });
+
+            if (!room || room.status !== "playing") {
+                return;
+            }
+
+            const state = raceStates.get(userId);
+
+            if (!state || state.finished || state.timedOut) {
+                return;
+            }
+
+            //! Mark this player as forfeited.
+            state.finished = true;
+            state.forfeited = true;
+            state.timedOut = false;
+            state.finishTime = Date.now();
+
+            clearTimeout(state.timeout);
+            clearTimeout(state.promptTimeout);
+
+            const raceId = raceIdsByRoom.get(roomCode);
+
+            await savePlayerResult(
+                userId,
+                room._id,
+                state,
+                raceId
+            );
+
+            console.log(`${userId} forfeited the race`);
+
+            io.to(roomCode).emit("playerTimedOut", {
+                userId,
+                forfeited: true
+            });
+
+            // ?Find players who are still actively racing.
+            const activePlayers = room.players.filter((playerId) => {
+                const playerState = raceStates.get(
+                    playerId.toString()
+                );
+
+                return (
+                    playerState &&
+                    !playerState.finished &&
+                    !playerState.timedOut &&
+                    !playerState.forfeited
+                );
+            });
+
+            // *If only one player is still racing, finish their race.
+            if (activePlayers.length === 1) {
+                const winnerId = activePlayers[0].toString();
+                const winnerState = raceStates.get(winnerId);
+
+                if (winnerState) {
+                    winnerState.finished = true;
+                    winnerState.finishTime = Date.now();
+
+                    clearTimeout(winnerState.timeout);
+                    clearTimeout(winnerState.promptTimeout);
+
+                    await savePlayerResult(
+                        winnerId,
+                        room._id,
+                        winnerState,
+                        raceId
+                    );
+                }
+            }
+
+            // Finalize results using your existing ranking logic.
+            await checkRaceResults(roomCode, room);
+
+        } catch (error) {
+            console.error("Failed to forfeit game:", error);
+            socket.emit("gameError", "Failed to forfeit game");
+        }
+    });
+
+    // *return to room listener
+    socket.on("returnToRoom", async () => {
+        try {
+            // !invalid checking
+            if (!socket.userId || !socket.roomCode) {
+                socket.emit("gameError", "You are not in a room");
                 return;
             }
 
@@ -436,46 +771,160 @@ io.on("connection", (socket) => {
             });
 
             if (!room) {
+                socket.emit("gameError", "Room not found");
+                return;
+            }
+            // !================================================
+
+            const userId = socket.userId.toString();
+            const state = raceStates.get(userId);
+
+            // ? allow players to return to the room even if someone else is playing, but only if they have finished or forfeited their race.
+            if (room.status === "playing" && (!state || !state.finished)) {
+                socket.emit("gameError", "You must finish or forfeit the race first");
+                return;
+            }
+            socket.emit("returnedToRoom");
+
+        } catch (error) {
+            console.error("Failed to return to room:", error);
+            socket.emit("gameError", "Failed to return to room");
+        }
+    });
+
+    // ?disconnect listener
+    socket.on("disconnect", async (reason) => {
+        try {
+            console.log("SOCKET DISCONNECTED:", socket.id, reason);
+
+            if (!socket.userId || !socket.roomCode) {
                 return;
             }
 
+            const userId = socket.userId.toString();
+            const roomCode = socket.roomCode;
+            const Room = require("./models/Room");
+
+            // ! Remove the disconnected player from the ready list.
+            const readyPlayers = readyPlayersByRoom.get(roomCode);
+
+            if (readyPlayers) {
+                readyPlayers.delete(userId);
+            }
+
+            const room = await Room.findOne({ roomCode });
+
+            if (!room) {
+                return;
+            }
+
+            // ! If the game is currently in progress, handle the disconnection as a forfeit.
             const wasPlaying = room.status === "playing";
 
-            // * Remove the disconnected player.
-            room.players = room.players.filter(
-                (playerId) =>
-                    playerId.toString() !== socket.userId.toString()
-            );
+            if (wasPlaying) {
+                const state = raceStates.get(userId);
 
-            //! Only end the game if 1 or fewer players remain.
-            if (wasPlaying && room.players.length <= 1) {
-                room.status = "finished";
-                await room.save();
+                if (state && !state.finished) {
+                    state.finished = true;
+                    state.forfeited = true;
+                    state.timedOut = false;
+                    state.finishTime = Date.now();
 
-                io.to(socket.roomCode).emit("gameOver", {
-                    winner: "opponentDisconnected"
-                });
+                    clearTimeout(state.timeout);
+                    clearTimeout(state.promptTimeout);
+
+                    const raceId = raceIdsByRoom.get(roomCode);
+
+                    await savePlayerResult(
+                        userId,
+                        room._id,
+                        state,
+                        raceId
+                    );
+
+
+                    io.to(roomCode).emit("playerTimedOut", {
+                        userId,
+                        forfeited: true
+                    });
+                }
+
+
+
+                // ! If only one active player remains, they win automatically.
+                const activePlayers = room.players
+                    .map((playerId) => playerId.toString())
+                    .filter((playerId) => {
+
+                        // *Exclude the disconnected player.
+
+                        if (playerId === userId) {
+                            return false;
+                        }
+
+                        const playerState = raceStates.get(playerId);
+
+                        // ? Only return players who are still racing are active.
+                        return playerState && !playerState.finished;
+                    });
+
+                // ! end the race if only one player is left
+                if (activePlayers.length === 1) {
+                    const winnerId = activePlayers[0];
+                    const winnerState = raceStates.get(winnerId);
+
+                    if (winnerState && !winnerState.finished) {
+                        winnerState.finished = true;
+                        winnerState.forfeited = false;
+                        winnerState.timedOut = false;
+                        winnerState.finishTime = Date.now();
+
+                        clearTimeout(winnerState.timeout);
+                        clearTimeout(winnerState.promptTimeout);
+
+                        const raceId = raceIdsByRoom.get(roomCode);
+
+                        await savePlayerResult(
+                            winnerId,
+                            room._id,
+                            winnerState,
+                            raceId
+                        );
+
+                        io.to(roomCode).emit("gameOver", {
+                            winner: winnerId,
+                            reason: "opponentDisconnected"
+                        });
+                    }
+                }
+
+                // *Finalize only when all race participants have results.
+                await checkRaceResults(roomCode, room);
 
                 return;
             }
 
-            //? Save the updated player list.
+            // ! remove player from room list if player disconnects while in waiting room
+            room.players = room.players.filter(
+                (playerId) => playerId.toString() !== userId
+            );
+
             await room.save();
 
-            //! Update the remaining players in the room.
             const updatedRoom = await Room.findById(room._id)
                 .populate("players", "username");
 
-            io.to(socket.roomCode).emit("playerListUpdated", {
-                roomCode: socket.roomCode,
-                players: updatedRoom.players
+            io.to(roomCode).emit("playerListUpdated", {
+                roomCode,
+                players: updatedRoom.players,
+                readyPlayers: [
+                    ...(readyPlayersByRoom.get(roomCode) || new Set())
+                ],
+                hostId: updatedRoom.hostId.toString(),
+                difficulty: updatedRoom.difficulty
             });
-
         } catch (error) {
-            console.error(
-                "Failed to handle disconnect:",
-                error
-            );
+            console.error("Failed to handle disconnect:", error);
         }
     });
 });

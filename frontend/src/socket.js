@@ -1,3 +1,4 @@
+// ? socket connection to the backend server
 import { io } from "socket.io-client";
 
 const socket = io("http://localhost:5000", {

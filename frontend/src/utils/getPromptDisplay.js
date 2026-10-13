@@ -1,7 +1,8 @@
+// ? handle input display for keyboard, xbox, and dualshock controllers
 const getPromptDisplay = (promptKey, displayMode) => {
     const key = promptKey.toUpperCase();
 
-    // Keyboard is always the default display.
+    // * return keyboard keys
     if (displayMode === "keyboard") {
         if (key === "SPACE") return "SPACE";
         if (key === "UP") return "↑";
@@ -11,7 +12,7 @@ const getPromptDisplay = (promptKey, displayMode) => {
         return key;
     }
 
-    // Left analog stick directions.
+    // ! Left analog stick directions.
     const stickDirections = {
         W: "↑",
         A: "←",

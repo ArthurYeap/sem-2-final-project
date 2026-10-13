@@ -1,8 +1,10 @@
+// ! authentication context to manage user and token
 import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
+    // * fetching user and token from localStorage
     const [user, setUser] = useState(() => {
         const savedUser = localStorage.getItem("user");
 

@@ -1,3 +1,5 @@
+// * route that sends none admin user to home page
+
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 

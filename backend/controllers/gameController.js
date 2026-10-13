@@ -10,29 +10,22 @@ function getUserId(req) {
     return id.toString();
 }
 
+
 const getGames = async (req, res) => {
     let filters = {};
 
     if (req.user.role === "admin") {
-        // ?Admins can view all games or apply filters.
-        filters = req.query;
+        filters = { ...req.query };
     } else {
-        // !Regular players can only view their own games.
-        filters = {
-            ...req.query,
-            userId: req.user.id || req.user.userId || req.user._id
-        };
+        // Regular users can only view their own games.
+        filters.userId = getUserId(req);
     }
 
-    const games = await gameService.getAllGames(filters);
+    const result = await gameService.getAllGames(filters);
 
-    games.sort(
-        (a, b) =>
-            new Date(b.completedAt) - new Date(a.completedAt)
-    );
-
-    res.status(200).json(games);
+    res.status(200).json(result);
 };
+
 
 const getGame = async (req, res) => {
     const game = await gameService.getGameById(req.params.id);
@@ -59,6 +52,7 @@ const getGame = async (req, res) => {
 };
 
     // !For single player results only.
+
 const createGame = async (req, res) => {
     if (req.body.mode !== "singleplayer") {
         return res.status(400).json({
@@ -68,8 +62,9 @@ const createGame = async (req, res) => {
 
     const finalTime = Number(req.body.finalTime);
     const wrongInputs = Number(req.body.wrongInputs);
+    const difficulty = req.body.difficulty;
 
-    // *validate is finalTime and wrongInputs are valid numbers
+    // Validate game result
     if (
         !Number.isFinite(finalTime) ||
         finalTime < 0 ||
@@ -80,17 +75,26 @@ const createGame = async (req, res) => {
             message: "Invalid game result"
         });
     }
-    // *=====================================================
+
+    // Validate difficulty
+    if (!["normal", "hard"].includes(difficulty)) {
+        return res.status(400).json({
+            message: "Difficulty must be normal or hard"
+        });
+    }
 
     const game = await gameService.createGame({
         userId: getUserId(req),
         mode: "singleplayer",
+        difficulty,
         finalTime,
         wrongInputs,
         timedOut: req.body.timedOut === true
     });
+
     res.status(201).json(game);
 };
+
     // !==================================================
 
 

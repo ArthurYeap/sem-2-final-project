@@ -18,6 +18,13 @@ const gameSchema = new mongoose.Schema({
         ref: "Room"
     },
 
+    difficulty: {
+        type: String,
+        enum: ["normal", "hard"],
+        required: true,
+        default: "normal"
+    },
+
     finalTime: {
         type: Number,
         required: true,
@@ -28,6 +35,11 @@ const gameSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 0
+    },
+
+    forfeited: {
+        type: Boolean,
+        default: false
     },
 
     rank: {

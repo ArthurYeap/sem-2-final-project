@@ -5,6 +5,7 @@ import {AuthProvider} from './context/AuthContext.jsx'
 import Login from "./pages/Login.jsx";
 import Home from "./pages/Home.jsx";
 import NotFound from "./pages/NotFound.jsx";
+import PublicOnlyRoute from "./components/PublicOnlyRoute";
 import Singleplayer
     from "./pages/Singleplayer.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
@@ -21,8 +22,17 @@ import './index.css'
 
 const router = createBrowserRouter([
     {
-        path: "/",
-        element: <Login />
+        element: <PublicOnlyRoute />,
+        children: [
+            {
+                path: "/",
+                element: <Login />,
+            },
+            {
+                path: "/register",
+                element: <Register />,
+            },
+        ],
     },
     {
         path: "*",
@@ -61,10 +71,6 @@ const router = createBrowserRouter([
                 <GameHistory />
             </ProtectedRoute>
         )
-    },
-    {
-        path: "/register",
-        element: <Register />
     },
     {
         path: "/singleplayer",
