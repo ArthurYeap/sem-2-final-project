@@ -39,7 +39,6 @@ const Game = () => {
     // ! return to room handler
     const handleReturnToRoom = () => {
         setError("");
-        console.log("Return to Room clicked");
         socket.emit("returnToRoom");
     };
 
@@ -134,7 +133,7 @@ const Game = () => {
             }
         };
 
-        // handle player timed out or forfeited
+        // * handle player timed out or forfeited
         const handlePlayerTimedOut = (data) => {
             if (data.userId.toString() !== user._id.toString()) {
                 return;

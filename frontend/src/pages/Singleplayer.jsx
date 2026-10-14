@@ -191,6 +191,7 @@ const Singleplayer = () => {
 
         const nextIndex = indexRef.current + 1;
 
+        // ? If the next index exceeds the total prompts, save the result and set timeout to false and end the game.
         if (nextIndex >= TOTAL_PROMPTS) {
             indexRef.current = nextIndex;
             saveResult(false);
@@ -239,9 +240,9 @@ const Singleplayer = () => {
 
             promptHandledRef.current = false;
         } else {
-            //! Incorrect input: +1 wrong input and +2 seconds.
+            //! Incorrect input: +1 wrong input and +1 second.
             wrongInputsRef.current += 1;
-            penaltyRef.current += 2000;
+            penaltyRef.current += 1000;
 
             setWrongInputs(wrongInputsRef.current);
             setPenaltyTime(penaltyRef.current);

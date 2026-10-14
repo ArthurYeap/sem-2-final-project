@@ -154,6 +154,7 @@ const checkRaceResults = async (roomCode, room) => {
         // *Clear previous race readiness.
         readyPlayersByRoom.set(roomCode, new Set());
 
+        // ! emit the final results to all players in the room
         io.to(roomCode).emit("raceResults", {
             results: results.map((result) => ({
                 userId: result.userId._id.toString(),
@@ -291,6 +292,8 @@ io.on("connection", (socket) => {
                 return;
             }
             // !=================================================
+
+            // ? Initialize the ready players set for this room if it doesn't exist
             if (!readyPlayersByRoom.has(socket.roomCode)) {
                 readyPlayersByRoom.set(socket.roomCode, new Set());
             }
@@ -304,6 +307,7 @@ io.on("connection", (socket) => {
                 readyPlayers.delete(userId);
             }
 
+            // * Emit the updated ready status to all clients in the room
             io.to(socket.roomCode).emit("readyStatusUpdated", {
                 readyPlayers: [...readyPlayers]
             });
@@ -652,7 +656,7 @@ io.on("connection", (socket) => {
             room.difficulty = difficulty;
             await room.save();
 
-            // Everyone in the room receives the updated difficulty.
+            //? Everyone in the room receives the updated difficulty.
             io.to(socket.roomCode).emit("difficultyUpdated", {
                 difficulty: room.difficulty
             });
@@ -717,6 +721,7 @@ io.on("connection", (socket) => {
                     playerId.toString()
                 );
 
+                // ? Only return players who are still racing (not finished, timed out, or forfeited).
                 return (
                     playerState &&
                     !playerState.finished &&
@@ -746,7 +751,6 @@ io.on("connection", (socket) => {
                 }
             }
 
-            // Finalize results using your existing ranking logic.
             await checkRaceResults(roomCode, room);
 
         } catch (error) {
@@ -851,7 +855,7 @@ io.on("connection", (socket) => {
 
 
 
-                // ! If only one active player remains, they win automatically.
+                // ! get active players.
                 const activePlayers = room.players
                     .map((playerId) => playerId.toString())
                     .filter((playerId) => {
@@ -930,6 +934,6 @@ io.on("connection", (socket) => {
 });
 
 
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+server.listen(5000, "0.0.0.0", () => {
+    console.log("Server running on port 5000");
 });
